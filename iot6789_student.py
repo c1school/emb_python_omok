@@ -1,112 +1,116 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Apr 28 10:04:19 2020
-
-Maker : bychoi@deu.ac.kr 
-
-@author: Com
-"""
-
 from player import *
 from stone import *
 from random import *
 
 class iot6789_student(player):
     def __init__(self, clr):
-        super().__init__(clr)  # call constructor of super class
-        self.opponent_color = 1 if clr == -1 else -1 # 상대방 돌 색깔
+        super().__init__(clr)
+        self.opponent_color = 1 if clr == -1 else -1
 
-    def __del__(self):  # destructor
-        pass
+    def next(self, board, length):
+        print(" **** Black player (Super Attack) **** ")
+        stn = stone(self._color)
 
-    def next(self, board, length):  # override
-        print(" **** Black player : My Turns **** ")
-        stn = stone(self._color)  # protected variable
+        max_score = -99999999
+        best_candidates = [] 
 
-        best_x = -1
-        best_y = -1
-        max_score = -float('inf') # 음의 무한대
-
-        # 1. 모든 비어있는 칸(0)을 탐색
+        # 중앙부터 탐색 (효율성)
+        candidates = []
+        center = length // 2
         for x in range(length):
             for y in range(length):
                 if board[x][y] == 0:
-                    # 2. 이 자리에 돌을 놨을 때의 점수 계산
-                    
-                    # 2-1. 나의 공격 점수 계산
-                    my_score = self.calculate_score(board, x, y, self._color, length)
-                    
-                    # 2-2. 상대방의 공격 점수 (== 나의 방어 점수) 계산
-                    opponent_score = self.calculate_score(board, x, y, self.opponent_color, length)
-                    
-                    # 3. 총점 계산 (방어 점수에 가중치를 더 줄 수 있음)
-                    # 예: 상대방이 4를 만드는 자리는 내가 3을 만드는 자리보다 중요
-                    total_score = my_score + (opponent_score * 1.5) 
-                    
-                    # 4. 최고 점수 갱신
-                    if total_score > max_score:
-                        max_score = total_score
-                        best_x = x
-                        best_y = y
+                    dist = abs(x - center) + abs(y - center)
+                    candidates.append((dist, x, y))
+        candidates.sort()
 
-        # 5. 찾은 최적의 위치에 돌을 둠
-        if best_x == -1 or best_y == -1:
-            # (예외 처리) 만약 둘 곳이 없으면 (이론상으론 없지만) 랜덤
-            while True:
-                best_x = randint(0, length - 1) % length
-                best_y = randint(0, length - 1) % length
-                if (board[best_x][best_y] == 0):
-                    break
-        
+        for _, x, y in candidates:
+            # [전략] 공격(att)에 2.0배 가중치! 
+            # 방어보다 내 공격을 우선시함. 내가 먼저 5목 만들면 그만이라는 마인드.
+            att = self.evaluate(board, x, y, self._color, length)
+            dfs = self.evaluate(board, x, y, self.opponent_color, length)
+            
+            # 중앙 가산점 (아주 미세하게)
+            dist_score = length - (abs(x - center) + abs(y - center))
+            
+            # 기본 점수 계산
+            total = (att * 2.0) + dfs + dist_score
+
+            # [필수] 킬각(Kill Angle) 및 위기 감지 로직
+            # 1. 내가 이기는 수 (5목) -> 무조건 둠 (최우선)
+            if att >= 10000000: total = 1000000000
+            # 2. 상대가 이기는 수 (상대 5목) -> 무조건 막아야 함
+            elif dfs >= 10000000: total = 500000000
+            # 3. 내 열린 4 (다음 턴 승리 확정) -> 무조건 둠
+            elif att >= 500000: total = 100000000
+            # 4. 상대 열린 4 (막아도 짐, 그래도 막아야 함)
+            elif dfs >= 500000: total = 50000000
+
+            # 최고 점수 갱신 (동점자 처리 포함)
+            if total > max_score:
+                max_score = total
+                best_candidates = [(x, y)]
+            elif total == max_score:
+                best_candidates.append((x, y))
+            
+            # 즉시 종료 조건 (계산 시간 단축)
+            if max_score >= 1000000000:
+                break
+
+        # 점수가 가장 높은 곳들 중에서만 랜덤 (실수 없음)
+        best_x, best_y = choice(best_candidates)
+
         stn.setX(best_x)
         stn.setY(best_y)
-        print(" === Black player was completed ==== ")
         return stn
 
-    def calculate_score(self, board, x, y, color, length):
-        """
-        (x, y) 위치에 'color' 돌을 놓았을 때의 점수를 반환하는 함수
-        이것이 이 과제의 핵심입니다.
-        """
-        total_score = 0
-        
-        # 4가지 방향 (가로, 세로, 대각선\, 대각선/)을 확인해야 함
-        directions = [(0, 1), # 가로
-                      (1, 0), # 세로
-                      (1, 1), # 대각선 \
-                      (1, -1)] # 대각선 /
+    def evaluate(self, board, x, y, color, length):
+        score = 0
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
         
         for dx, dy in directions:
-            # TODO: 이 부분에 점수 로직을 구현해야 합니다.
-            # (x, y)를 중심으로 (dx, dy) 방향으로 연속된 'color' 돌의 개수를 셉니다.
-            # 또한, 그 라인이 '열린 라인'인지 (양쪽이 비어있는지) '닫힌 라인'인지 확인합니다.
+            count, open_ends = self.check_line(board, x, y, dx, dy, color, length)
             
-            # 예시: 5목 완성 (승리)
-            # if self.check_line(board, x, y, dx, dy, color, length) == 5:
-            #     total_score += 10000000 # 승리 점수
-                 
-            # 예시: 4목 (열린 4)
-            # if self.check_line(...) == 4 and self.is_open(board, ...):
-            #     total_score += 100000
+            # 점수 체계 (실수 방지를 위해 더 세분화)
+            if count >= 5: score += 10000000
+            elif count == 4:
+                if open_ends == 2: score += 500000  # 열린 4 (필승)
+                elif open_ends == 1: score += 5000  # 닫힌 4
+            elif count == 3:
+                if open_ends == 2: score += 10000   # 열린 3 (매우 중요)
+                elif open_ends == 1: score += 100
+            elif count == 2:
+                if open_ends == 2: score += 100
+                elif open_ends == 1: score += 10
+        return score
+
+    def check_line(self, board, x, y, dx, dy, color, length):
+        count = 1
+        open_ends = 0
+        
+        # 정방향
+        curr_x, curr_y = x + dx, y + dy
+        while 0 <= curr_x < length and 0 <= curr_y < length:
+            if board[curr_x][curr_y] == color:
+                count += 1
+                curr_x += dx
+                curr_y += dy
+            elif board[curr_x][curr_y] == 0:
+                open_ends += 1
+                break
+            else: break
+        
+        # 역방향
+        curr_x, curr_y = x - dx, y - dy
+        while 0 <= curr_x < length and 0 <= curr_y < length:
+            if board[curr_x][curr_y] == color:
+                count += 1
+                curr_x -= dx
+                curr_y -= dy
+            elif board[curr_x][curr_y] == 0:
+                open_ends += 1
+                break
+            else: break
             
-            pass # 이 부분을 채워야 합니다.
-
-        # 임시로 가장 기본적인 점수 (중앙에 가까울수록 +1점)
-        # 이 부분을 진짜 오목 로직으로 바꿔야 합니다.
-        if total_score == 0:
-             center = length // 2
-             total_score = -(abs(x - center) + abs(y - center)) # 중앙에 가까울수록 점수 높게
-
-        return total_score
-
-    # TODO:
-    # def check_line(self, board, x, y, dx, dy, color, length):
-    #     """ (x,y)에서 (dx,dy) 방향으로 연속된 돌의 개수를 세는 헬퍼 함수 """
-    #     count = 0
-    #     # ... 로직 구현 ...
-    #     return count
-
-    # def is_open(self, board, x, y, dx, dy, color, length):
-    #     """ (x,y)에서 (dx,dy) 방향으로 이어진 돌들이 열려있는지 (양쪽이 막히지 않았는지) 확인 """
-    #     # ... 로직 구현 ...
-    #     return True
+        return count, open_ends
